@@ -47,6 +47,10 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
+        openai: "hsl(var(--openai))",
+        claude: "hsl(var(--claude))",
+        gemini: "hsl(var(--gemini))",
+        perplexity: "hsl(var(--perplexity))",
         sidebar: {
           DEFAULT: "hsl(var(--sidebar-background))",
           foreground: "hsl(var(--sidebar-foreground))",

@@ -1,0 +1,4 @@
+project_id = "naewgowpatluotyrvrdo"
+
+[functions.compare-ai]
+verify_jwt = false
