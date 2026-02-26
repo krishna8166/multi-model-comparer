@@ -1,15 +1,12 @@
 import { useState, useRef, useCallback, useMemo } from "react";
-import { Search, Zap, Lock } from "lucide-react";
+import { Search, Zap } from "lucide-react";
 import AIResponseCard from "@/components/AIResponseCard";
 import ComparisonAnalysis from "@/components/ComparisonAnalysis";
 import SimilarityBadge from "@/components/SimilarityBadge";
 import Navbar from "@/components/Navbar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useAuth } from "@/contexts/AuthContext";
-import { useUsageLimit } from "@/hooks/useUsageLimit";
 import { computeSimilarity, findCommonSentences } from "@/lib/similarity";
-import { useNavigate } from "react-router-dom";
 
 interface AIResponse {
   id: string;
@@ -32,10 +29,6 @@ const Index = () => {
   const [hasSearched, setHasSearched] = useState(false);
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-
-  const { user } = useAuth();
-  const { dailyUsage, maxUsage, canCompare, logUsage } = useUsageLimit();
-  const navigate = useNavigate();
 
   const scrollRefs = useRef(AI_PROVIDERS.map(() => ({ current: null as HTMLDivElement | null })));
 
@@ -71,25 +64,12 @@ const Index = () => {
     e.preventDefault();
     if (!topic.trim() || isLoading) return;
 
-    if (!user) {
-      navigate("/auth");
-      return;
-    }
-
-    if (!canCompare) {
-      toast.error("You've reached your daily limit of 3 free comparisons.");
-      return;
-    }
-
     setIsLoading(true);
     setHasSearched(true);
     setResponses([]);
     setAnalysis(null);
 
     try {
-      const logged = await logUsage(topic.trim());
-      if (!logged) throw new Error("Failed to log usage");
-
       const { data, error } = await supabase.functions.invoke("compare-ai", {
         body: { topic: topic.trim() },
       });
@@ -126,7 +106,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Navbar dailyUsage={dailyUsage} maxUsage={maxUsage} />
+      <Navbar />
 
       <div className="max-w-7xl mx-auto px-4 py-10 md:py-16">
         {/* Hero */}
@@ -161,20 +141,11 @@ const Index = () => {
             <button
               type="submit"
               disabled={isLoading || !topic.trim()}
-              className="h-12 px-6 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 disabled:opacity-40 transition-all shadow-sm flex items-center gap-2"
+              className="h-12 px-6 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 disabled:opacity-40 transition-all shadow-sm"
             >
-              {!user && <Lock className="w-3.5 h-3.5" />}
               {isLoading ? "Querying…" : "Compare"}
             </button>
           </div>
-          {!user && (
-            <p className="text-xs text-muted-foreground text-center mt-2">
-              <button onClick={() => navigate("/auth")} className="text-primary hover:underline">
-                Sign in
-              </button>{" "}
-              to start comparing (3 free per day)
-            </p>
-          )}
         </form>
 
         {/* Similarity badges */}
