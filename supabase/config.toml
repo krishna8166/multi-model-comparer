@@ -2,3 +2,6 @@ project_id = "naewgowpatluotyrvrdo"
 
 [functions.compare-ai]
 verify_jwt = false
+
+[functions.analyze-comparison]
+verify_jwt = false
