@@ -1,9 +1,15 @@
-import { useState } from "react";
-import { Search, GraduationCap } from "lucide-react";
+import { useState, useRef, useCallback, useMemo } from "react";
+import { Search, Zap, Lock } from "lucide-react";
 import AIResponseCard from "@/components/AIResponseCard";
 import ComparisonAnalysis from "@/components/ComparisonAnalysis";
+import SimilarityBadge from "@/components/SimilarityBadge";
+import Navbar from "@/components/Navbar";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
+import { useUsageLimit } from "@/hooks/useUsageLimit";
+import { computeSimilarity, findCommonSentences } from "@/lib/similarity";
+import { useNavigate } from "react-router-dom";
 
 interface AIResponse {
   id: string;
@@ -27,9 +33,53 @@ const Index = () => {
   const [analysis, setAnalysis] = useState<string | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
 
+  const { user } = useAuth();
+  const { dailyUsage, maxUsage, canCompare, logUsage } = useUsageLimit();
+  const navigate = useNavigate();
+
+  const scrollRefs = useRef(AI_PROVIDERS.map(() => ({ current: null as HTMLDivElement | null })));
+
+  const handleSyncScroll = useCallback((scrollTop: number, sourceIndex: number) => {
+    scrollRefs.current.forEach((ref, i) => {
+      if (i !== sourceIndex && ref.current) {
+        ref.current.scrollTop = scrollTop;
+      }
+    });
+  }, []);
+
+  const similarities = useMemo(() => {
+    if (responses.length < 2) return [];
+    const pairs: { labelA: string; labelB: string; percentage: number }[] = [];
+    for (let i = 0; i < responses.length; i++) {
+      for (let j = i + 1; j < responses.length; j++) {
+        pairs.push({
+          labelA: responses[i].label,
+          labelB: responses[j].label,
+          percentage: computeSimilarity(responses[i].content, responses[j].content),
+        });
+      }
+    }
+    return pairs;
+  }, [responses]);
+
+  const highlightedSentences = useMemo(() => {
+    if (responses.length < 2) return new Set<string>();
+    return findCommonSentences(responses.map((r) => r.content));
+  }, [responses]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim() || isLoading) return;
+
+    if (!user) {
+      navigate("/auth");
+      return;
+    }
+
+    if (!canCompare) {
+      toast.error("You've reached your daily limit of 3 free comparisons.");
+      return;
+    }
 
     setIsLoading(true);
     setHasSearched(true);
@@ -37,6 +87,9 @@ const Index = () => {
     setAnalysis(null);
 
     try {
+      const logged = await logUsage(topic.trim());
+      if (!logged) throw new Error("Failed to log usage");
+
       const { data, error } = await supabase.functions.invoke("compare-ai", {
         body: { topic: topic.trim() },
       });
@@ -59,7 +112,6 @@ const Index = () => {
       const { data, error } = await supabase.functions.invoke("analyze-comparison", {
         body: { topic: topic.trim(), responses },
       });
-
       if (error) throw error;
       setAnalysis(data.analysis || null);
     } catch (err) {
@@ -73,22 +125,23 @@ const Index = () => {
   const getResponse = (id: string) => responses.find((r) => r.id === id);
 
   return (
-    <div className="min-h-screen bg-background px-4 py-8 md:py-14">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-2 mb-3">
-            <GraduationCap className="w-5 h-5 text-primary" />
-            <span className="font-mono text-xs tracking-widest uppercase text-muted-foreground">
-              Research Comparator
-            </span>
+    <div className="min-h-screen bg-background">
+      <Navbar dailyUsage={dailyUsage} maxUsage={maxUsage} />
+
+      <div className="max-w-7xl mx-auto px-4 py-10 md:py-16">
+        {/* Hero */}
+        <div className="text-center mb-12">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-accent text-accent-foreground text-xs font-medium mb-4">
+            <Zap className="w-3 h-3" />
+            AI-powered research comparison
           </div>
-          <h1 className="text-4xl md:text-5xl font-serif font-bold tracking-tight text-foreground mb-3">
-            Multi-Model Analysis
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-foreground mb-3">
+            Compare AI Models,{" "}
+            <span className="text-primary">Side by Side</span>
           </h1>
           <p className="text-muted-foreground max-w-xl mx-auto text-sm leading-relaxed">
-            Submit a research topic to query four AI models simultaneously. Compare their responses
-            and generate a structured comparative analysis.
+            Submit a topic. Get responses from 4 leading AI models. Analyze similarities,
+            differences, and generate a comparative report—all in one place.
           </p>
         </div>
 
@@ -101,25 +154,43 @@ const Index = () => {
                 type="text"
                 value={topic}
                 onChange={(e) => setTopic(e.target.value)}
-                placeholder="e.g. Impact of large language models on scientific peer review"
-                className="w-full h-11 pl-10 pr-4 rounded-lg bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all"
+                placeholder="e.g. Impact of AI on healthcare diagnostics"
+                className="w-full h-12 pl-10 pr-4 rounded-xl bg-card border border-border text-foreground placeholder:text-muted-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring transition-all shadow-sm"
               />
             </div>
             <button
               type="submit"
               disabled={isLoading || !topic.trim()}
-              className="h-11 px-5 rounded-lg bg-primary text-primary-foreground font-medium text-sm hover:opacity-90 disabled:opacity-40 transition-all"
+              className="h-12 px-6 rounded-xl bg-primary text-primary-foreground font-semibold text-sm hover:opacity-90 disabled:opacity-40 transition-all shadow-sm flex items-center gap-2"
             >
-              {isLoading ? "Querying…" : "Submit"}
+              {!user && <Lock className="w-3.5 h-3.5" />}
+              {isLoading ? "Querying…" : "Compare"}
             </button>
           </div>
+          {!user && (
+            <p className="text-xs text-muted-foreground text-center mt-2">
+              <button onClick={() => navigate("/auth")} className="text-primary hover:underline">
+                Sign in
+              </button>{" "}
+              to start comparing (3 free per day)
+            </p>
+          )}
         </form>
+
+        {/* Similarity badges */}
+        {similarities.length > 0 && !isLoading && (
+          <div className="flex flex-wrap justify-center gap-2 mb-6">
+            {similarities.map((s, i) => (
+              <SimilarityBadge key={i} {...s} />
+            ))}
+          </div>
+        )}
 
         {/* Response Grid */}
         {hasSearched && (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-              {AI_PROVIDERS.map((provider) => {
+              {AI_PROVIDERS.map((provider, idx) => {
                 const resp = getResponse(provider.id);
                 return (
                   <AIResponseCard
@@ -129,6 +200,9 @@ const Index = () => {
                     content={resp?.content || null}
                     wordCount={resp?.wordCount || null}
                     isLoading={isLoading}
+                    highlightedSentences={highlightedSentences}
+                    scrollRef={scrollRefs.current[idx]}
+                    onScroll={(top) => handleSyncScroll(top, idx)}
                   />
                 );
               })}
@@ -139,6 +213,8 @@ const Index = () => {
               isLoading={isAnalyzing}
               onGenerate={handleAnalyze}
               canGenerate={responses.length > 0 && !isLoading}
+              topic={topic}
+              responses={responses}
             />
           </>
         )}
