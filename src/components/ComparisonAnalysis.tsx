@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import { Loader2, BookOpen, Download, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
 
 interface ComparisonAnalysisProps {
   analysis: string | null;
@@ -26,20 +27,43 @@ const ComparisonAnalysis = ({ analysis, isLoading, onGenerate, canGenerate, topi
   };
 
   const handleExport = () => {
-    let md = `# AI Compare: ${topic}\n\n`;
-    responses.forEach((r) => {
-      md += `## ${r.label}\n\n${r.content}\n\n`;
-    });
-    if (analysis) md += `## Comparative Analysis\n\n${analysis}\n`;
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const margin = 15;
+    const maxWidth = pageWidth - margin * 2;
+    let y = 20;
 
-    const blob = new Blob([md], { type: "text/markdown" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `ai-compare-${topic.slice(0, 30).replace(/\s+/g, "-")}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast.success("Exported as Markdown");
+    const addText = (text: string, fontSize: number, bold = false) => {
+      doc.setFontSize(fontSize);
+      doc.setFont("helvetica", bold ? "bold" : "normal");
+      const lines = doc.splitTextToSize(text, maxWidth);
+      for (const line of lines) {
+        if (y > doc.internal.pageSize.getHeight() - 20) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.text(line, margin, y);
+        y += fontSize * 0.5;
+      }
+      y += 4;
+    };
+
+    addText(`AI Compare: ${topic}`, 18, true);
+    y += 4;
+
+    responses.forEach((r) => {
+      addText(r.label, 14, true);
+      addText(r.content, 10);
+      y += 2;
+    });
+
+    if (analysis) {
+      addText("Comparative Analysis", 14, true);
+      addText(analysis, 10);
+    }
+
+    doc.save(`ai-compare-${topic.slice(0, 30).replace(/\s+/g, "-")}.pdf`);
+    toast.success("Exported as PDF");
   };
 
   return (
