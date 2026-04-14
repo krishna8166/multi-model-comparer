@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import { Loader2, BookOpen, Download, Copy, Check } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
 
 interface ComparisonAnalysisProps {
   analysis: string | null;
